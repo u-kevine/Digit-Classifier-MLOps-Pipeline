@@ -1,0 +1,8 @@
+data/
+notebook/
+locust/
+.git
+.venv
+__pycache__
+*.ipynb_checkpoints
+models/archive/
