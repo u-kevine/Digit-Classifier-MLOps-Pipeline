@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digit classifier console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  color-scheme: light;
+  --paper:#F3F5F1; --surface:#FFFFFF; --ink:#18231D; --muted:#5F6E66; --line:#D5DDD6;
+  --pine:#1E5B4F; --pine-soft:#DCEAE5; --marigold:#C98C00; --danger:#B3402E;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Figtree", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{ color-scheme: dark;
+    --paper:#121A16; --surface:#1A2520; --ink:#E6EEE8; --muted:#9AA9A0; --line:#2C3A33;
+    --pine:#5FB7A1; --pine-soft:#20352E; --marigold:#F2C14E; --danger:#E07A66; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 var(--body)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px 64px}
+h1,h2,h3{font-family:var(--display);font-weight:700;line-height:1.15;margin:0}
+h1{font-size:1.25rem} h2{font-size:1.6rem;margin-bottom:6px} h3{font-size:1.1rem;margin-bottom:8px}
+p{margin:0 0 10px;max-width:68ch} .muted{color:var(--muted)}
+header{display:flex;justify-content:space-between;align-items:center;padding:18px 0;border-bottom:1px solid var(--line)}
+.pill{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:.9rem}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.dot.ok{background:var(--pine);box-shadow:0 0 0 4px var(--pine-soft)}
+.dot.bad{background:var(--danger)}
+.pulse{display:grid;grid-template-columns:minmax(220px,300px) 1fr;gap:28px;align-items:end;padding:36px 0 28px}
+.uptime{font-family:var(--display);font-size:clamp(2.4rem,6vw,4rem);font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1}
+.facts{display:flex;flex-wrap:wrap;gap:6px 22px;margin-top:14px;font-size:.92rem;color:var(--muted)}
+.facts b{color:var(--ink);font-weight:600}
+.beat{height:150px;border-left:3px solid var(--marigold);padding-left:16px}
+section{padding:36px 0;border-top:1px solid var(--line)}
+.grid{display:grid;gap:22px}
+.g2{grid-template-columns:5fr 7fr} .g3{grid-template-columns:repeat(3,1fr)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px}
+.chart{position:relative;height:240px}
+.note{font-size:.92rem;color:var(--muted);margin-top:10px}
+.pad{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin:14px 0}
+#pad{background:#000;border-radius:12px;touch-action:none;cursor:crosshair;max-width:100%}
+.padbtns{display:flex;flex-direction:column;gap:10px}
+.drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:120px;border:2px dashed var(--line);border-radius:12px;cursor:pointer;text-align:center;padding:16px}
+.drop:hover,.drop.over{border-color:var(--pine);background:var(--pine-soft)}
+.drop img{max-width:100%;max-height:160px;border-radius:8px}
+button{font:600 .95rem var(--body);border:0;border-radius:10px;padding:11px 18px;background:var(--pine);color:var(--surface);cursor:pointer}
+button.ghost{background:transparent;color:var(--pine);border:1.5px solid var(--pine)}
+button:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible,input:focus-visible,.drop:focus-visible{outline:3px solid var(--marigold);outline-offset:2px}
+select,input[type=text]{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink);width:100%}
+label{font-weight:600;font-size:.92rem;display:block;margin:12px 0 6px}
+.answer{font-family:var(--display);font-size:2rem;font-weight:700;margin-top:16px}
+.bar{display:grid;grid-template-columns:110px 1fr 52px;gap:10px;align-items:center;font-size:.9rem;margin:6px 0}
+.bar span{height:10px;border-radius:5px;background:var(--pine-soft);overflow:hidden}
+.bar span i{display:block;height:100%;background:var(--pine)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:14px;margin-bottom:18px}
+.kpi strong{display:block;font-family:var(--display);font-size:1.7rem;font-variant-numeric:tabular-nums}
+.kpi small{color:var(--muted)}
+ol.steps{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(3,1fr);gap:22px;counter-reset:s}
+ol.steps>li{counter-increment:s}
+ol.steps>li h3::before{content:counter(s);display:inline-grid;place-items:center;width:28px;height:28px;margin-right:10px;border-radius:50%;background:var(--marigold);color:var(--paper);font-size:.95rem}
+.status{margin-top:12px;font-size:.92rem;min-height:1.5em}
+.status.err{color:var(--danger)}
+.scroll{overflow-x:auto}
+.avg{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.avg figure{margin:0;text-align:center;font-size:.85rem;color:var(--muted)}
+.avg canvas{width:100%;aspect-ratio:1;border-radius:6px;image-rendering:pixelated;display:block}
+table{border-collapse:collapse;font-size:.88rem;font-variant-numeric:tabular-nums;width:100%}
+th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+.cm td{text-align:center;border:1px solid var(--line)}
+@media (max-width:860px){.pulse,.g2,.g3,ol.steps{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Digit classifier console</h1>
+  <span class="pill"><span class="dot" id="dot"></span><span id="state">Connecting</span></span>
+</header>
+
+<div class="pulse">
+  <div>
+    <p class="muted">Up for</p>
+    <div class="uptime" id="uptime">–</div>
+    <div class="facts">
+      <span>Model <b id="ver">–</b></span>
+      <span>Container <b id="host">–</b></span>
+      <span>Requests <b id="reqs">–</b></span>
+      <span>Ping <b id="ping">–</b></span>
+    </div>
+  </div>
+  <div class="beat"><canvas id="beatChart" aria-label="Response time of health checks over the last few minutes"></canvas></div>
+</div>
+
+<section class="grid g2">
+  <div class="panel">
+    <h2>Read a digit</h2>
+    <p class="muted">Draw a digit, or drop a photo of one written on paper.</p>
+    <div class="pad"><canvas id="pad" width="224" height="224" aria-label="Drawing pad: draw one digit"></canvas>
+    <div class="padbtns"><button id="padGo">Read drawing</button><button class="ghost" id="padClear">Clear</button>
+        <select id="padLabel" aria-label="Correct digit for this drawing"><option value="">Correct digit…</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option></select>
+        <button class="ghost" id="padSave">Save for retraining</button></div></div>
+    <div class="drop" id="predDrop" tabindex="0" role="button" aria-label="Choose an image to classify">
+      <span id="predHint">Or drop an image here, or click to choose one</span>
+    </div>
+    <input type="file" id="predFile" accept="image/*" hidden>
+    <div id="predOut"></div>
+  </div>
+  <div class="panel">
+    <h2>How good is the model?</h2>
+    <p class="muted" id="trainedAt">Scores on the held-out test set.</p>
+    <div class="kpis" id="kpis"></div>
+    <div class="chart"><canvas id="f1Chart"></canvas></div>
+    <div style="margin-top:14px"><button class="ghost" id="evalBtn">Re-score live model</button>
+      <span class="status" id="evalStatus"></span></div>
+  </div>
+</section>
+
+<section>
+  <h2>What the data looks like</h2>
+  <p class="muted">How many examples each digit has, and two features measured from the images themselves.</p>
+  <div class="grid g3" style="margin-top:18px">
+    <div class="panel"><h3>Images per class</h3><div class="chart"><canvas id="countChart"></canvas></div>
+      <p class="note" id="countNote"></p></div>
+    <div class="panel"><h3>How wide each digit is</h3><div class="chart"><canvas id="shapeChart"></canvas></div>
+      <p class="note" id="shapeNote"></p></div>
+    <div class="panel"><h3>The average digit</h3><div class="avg" id="avgGrid"></div>
+      <p class="note" id="avgNote"></p></div>
+  </div>
+  <div class="grid g2" style="margin-top:22px">
+    <div class="panel"><h3>Confusion matrix</h3><p class="note" style="margin-top:0">Rows are the true class, columns the prediction.</p><div class="scroll" id="cm"></div></div>
+    <div class="panel"><h3>Training curves</h3><div class="chart"><canvas id="histChart"></canvas></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Teach it something new</h2>
+  <p class="muted" id="triggerNote">Upload labelled images, then retrain.</p>
+  <ol class="steps" style="margin-top:18px">
+    <li class="panel">
+      <h3>Upload images</h3>
+      <p class="note" style="margin-top:0">Many images of one digit, or a .zip with folders named 0 to 9.</p>
+      <label for="upFiles">Files</label>
+      <input type="file" id="upFiles" multiple accept="image/*,.zip">
+      <label for="upLabel">Which digit do they show? (not needed for a .zip)</label>
+      <select id="upLabel"><option value="">Choose a digit</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option></select>
+      <div style="margin-top:14px"><button id="upBtn">Upload images</button></div>
+      <div class="status" id="upStatus"></div>
+    </li>
+    <li class="panel">
+      <h3>Retrain</h3>
+      <p class="note" style="margin-top:0" id="pendingNote">No new images waiting.</p>
+      <button id="rtBtn">Retrain model</button>
+      <div class="status" id="rtStatus"></div>
+    </li>
+    <li class="panel">
+      <h3>Check the result</h3>
+      <p class="note" style="margin-top:0">A new model only goes live if it scores at least as well as the current one.</p>
+      <div class="scroll"><table id="versions"><thead><tr><th>Version</th><th>Trigger</th><th>Accuracy</th><th>F1</th></tr></thead><tbody></tbody></table></div>
+    </li>
+  </ol>
+</section>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const pct = x => (x == null ? "–" : (x * 100).toFixed(1) + "%");
+const palette = ["#1E5B4F","#C98C00","#7A5BA6","#3F7CB3","#B3402E","#5E8C31","#A0527C","#4E6E7E"];
+Chart.defaults.font.family = css("--body"); Chart.defaults.color = css("--muted");
+Chart.defaults.borderColor = css("--line"); Chart.defaults.maintainAspectRatio = false;
+const charts = {};
+function draw(id, cfg){ charts[id]?.destroy(); charts[id] = new Chart($(id), cfg); }
+async function api(path, opts){ const r = await fetch(path, opts); const j = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.detail || r.statusText); return j; }
+
+/* ---------- uptime heartbeat ---------- */
+const beats = [];
+draw("beatChart", {type:"line", data:{labels:[], datasets:[{data:[], borderColor:css("--marigold"),
+  borderWidth:2, pointRadius:0, tension:.3, fill:false}]},
+  options:{animation:false, plugins:{legend:{display:false}}, scales:{x:{display:false},
+  y:{beginAtZero:true, title:{display:true, text:"ms"}}}}});
+function fmt(s){ const d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60), x=Math.floor(s%60);
+  return (d? d+"d ":"") + (h? h+"h ":"") + m+"m " + String(x).padStart(2,"0")+"s"; }
+async function heartbeat(){
+  const t0 = performance.now();
+  try{
+    const h = await api("/health"); const ms = performance.now() - t0;
+    $("dot").className = "dot " + (h.status === "ok" ? "ok" : "bad");
+    $("state").textContent = h.status === "ok" ? (h.retraining === "running" ? "Online, retraining" : "Online") : "Online, no model yet";
+    $("uptime").textContent = fmt(h.uptime_seconds); $("ver").textContent = h.model_version ? "v"+h.model_version : "none";
+    $("host").textContent = h.container; $("reqs").textContent = h.requests_served.toLocaleString();
+    $("ping").textContent = ms.toFixed(0) + " ms"; beats.push(ms);
+  }catch{ $("dot").className = "dot bad"; $("state").textContent = "Offline"; beats.push(null); }
+  if(beats.length > 60) beats.shift();
+  const c = charts.beatChart; c.data.labels = beats.map((_,i)=>i); c.data.datasets[0].data = [...beats]; c.update();
+}
+
+/* ---------- prediction ---------- */
+const drop = $("predDrop"), pf = $("predFile");
+drop.onclick = () => pf.click();
+drop.onkeydown = e => { if(e.key==="Enter"||e.key===" "){ e.preventDefault(); pf.click(); } };
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); if(e.dataTransfer.files[0]) predict(e.dataTransfer.files[0]); };
+pf.onchange = () => pf.files[0] && predict(pf.files[0]);
+async function predict(file, name="upload.png"){
+  if(file instanceof File) drop.innerHTML = `<img alt="Selected image" src="${URL.createObjectURL(file)}">`;
+  $("predOut").innerHTML = `<p class="status">Reading…</p>`;
+  const fd = new FormData(); fd.append("file", file, file.name || name);
+  try{
+    const r = await api("/predict", {method:"POST", body:fd});
+    const rows = Object.entries(r.probabilities).sort((a,b)=>b[1]-a[1]).map(([k,v]) =>
+      `<div class="bar"><div>${k}</div><span><i style="width:${(v*100).toFixed(1)}%"></i></span><div>${pct(v)}</div></div>`).join("");
+    $("predOut").innerHTML = `<div class="answer">${r.label}</div>
+      <p class="muted">${pct(r.confidence)} sure, ${r.inference_ms} ms on ${r.container}</p>${rows}`;
+  }catch(e){ $("predOut").innerHTML = `<p class="status err">${e.message}</p>`; }
+}
+
+/* ---------- drawing pad ---------- */
+const pad = $("pad"), pctx = pad.getContext("2d"); let drawing = false;
+function clearPad(){ pctx.fillStyle = "#000"; pctx.fillRect(0,0,pad.width,pad.height); }
+clearPad(); pctx.strokeStyle = "#fff"; pctx.lineWidth = 18; pctx.lineCap = pctx.lineJoin = "round";
+function pos(e){ const r = pad.getBoundingClientRect(); return [(e.clientX-r.left)*pad.width/r.width, (e.clientY-r.top)*pad.height/r.height]; }
+pad.onpointerdown = e => { drawing = true; pad.setPointerCapture(e.pointerId); pctx.beginPath(); pctx.moveTo(...pos(e)); };
+pad.onpointermove = e => { if(drawing){ pctx.lineTo(...pos(e)); pctx.stroke(); } };
+pad.onpointerup = pad.onpointercancel = () => drawing = false;
+$("padClear").onclick = () => { clearPad(); $("predOut").innerHTML = ""; };
+$("padGo").onclick = () => pad.toBlob(b => predict(b, "drawing.png"), "image/png");
+$("padSave").onclick = () => {
+  const d = $("padLabel").value;
+  if(!d){ $("predOut").innerHTML = `<p class="status err">Choose the correct digit first.</p>`; return; }
+  pad.toBlob(async b => {
+    const fd = new FormData(); fd.append("files", b, "drawing.png"); fd.append("label", d);
+    try{ const r = await api("/upload", {method:"POST", body:fd});
+      $("predOut").innerHTML = `<p class="status">Saved as a ${d}. ${r.pending} image${r.pending===1?"":"s"} waiting for retraining.</p>`;
+      clearPad(); loadUploads(); if(r.auto_retrain_started) pollRetrain();
+    }catch(e){ $("predOut").innerHTML = `<p class="status err">${e.message}</p>`; }
+  }, "image/png");
+};
+
+/* ---------- model metrics ---------- */
+function showMetrics(m, names){
+  $("kpis").innerHTML = [["Accuracy",m.accuracy],["Precision",m.precision_macro],["Recall",m.recall_macro],
+    ["F1 score",m.f1_macro],["ROC-AUC",m.roc_auc_ovr]].map(([k,v]) =>
+    `<div class="kpi"><strong>${pct(v)}</strong><small>${k}</small></div>`).join("");
+  draw("f1Chart",{type:"bar", data:{labels:names, datasets:[
+    {label:"Precision", data:names.map(n=>m.per_class[n]?.precision), backgroundColor:palette[3]},
+    {label:"Recall", data:names.map(n=>m.per_class[n]?.recall), backgroundColor:palette[1]},
+    {label:"F1", data:names.map(n=>m.per_class[n]?.["f1-score"]), backgroundColor:palette[0]}]},
+    options:{scales:{y:{min:0,max:1}}}});
+  const max = Math.max(...m.confusion_matrix.flat());
+  $("cm").innerHTML = `<table class="cm"><tr><th></th>${names.map(n=>`<th>${n}</th>`).join("")}</tr>` +
+    m.confusion_matrix.map((row,i)=>`<tr><th>${names[i]}</th>${row.map((v,j)=>{
+      const a = max ? v/max : 0; const col = i===j ? "30,91,79" : "179,64,46";
+      return `<td style="background:rgba(${col},${(a*.85).toFixed(2)});color:${a>.5?"#fff":"inherit"}">${v}</td>`;}).join("")}</tr>`).join("") + "</table>";
+}
+async function loadMetrics(){
+  try{
+    const meta = await api("/metrics");
+    $("trainedAt").textContent = `Version ${meta.version}, trained ${new Date(meta.trained_at).toLocaleString()}, scored on ${meta.metrics.n_test} test images.`;
+    showMetrics(meta.metrics, meta.class_names);
+    const h = meta.history || {};
+    if(h.accuracy) draw("histChart",{type:"line", data:{labels:h.accuracy.map((_,i)=>i+1), datasets:[
+      {label:"Train accuracy", data:h.accuracy, borderColor:palette[0], pointRadius:0},
+      {label:"Validation accuracy", data:h.val_accuracy, borderColor:palette[1], pointRadius:0},
+      {label:"Train loss", data:h.loss, borderColor:palette[0], borderDash:[5,4], pointRadius:0, yAxisID:"y1"},
+      {label:"Validation loss", data:h.val_loss, borderColor:palette[1], borderDash:[5,4], pointRadius:0, yAxisID:"y1"}]},
+      options:{scales:{x:{title:{display:true,text:"Epoch"}}, y:{title:{display:true,text:"Accuracy"}},
+      y1:{position:"right", grid:{display:false}, title:{display:true,text:"Loss"}}}}});
+    $("versions").tBodies[0].innerHTML = [...meta.versions].reverse().map(v =>
+      `<tr><td>v${v.version}</td><td>${v.trigger.split(":")[0]}</td><td>${pct(v.accuracy)}</td><td>${pct(v.f1_macro)}</td></tr>`).join("");
+  }catch{ $("kpis").innerHTML = `<p class="muted">No trained model yet. Run the notebook or <code>python -m src.model train</code>.</p>`; }
+}
+$("evalBtn").onclick = async () => {
+  $("evalBtn").disabled = true; $("evalStatus").textContent = " Scoring on the test set…";
+  try{ const m = await api("/evaluate",{method:"POST"});
+    showMetrics(m, Object.keys(m.per_class).filter(k=>!["accuracy","macro avg","weighted avg"].includes(k)));
+    $("evalStatus").textContent = ` Done: ${pct(m.accuracy)} accuracy on ${m.n_test} images.`;
+  }catch(e){ $("evalStatus").textContent = " " + e.message; }
+  $("evalBtn").disabled = false;
+};
+
+/* ---------- dataset visualisations ---------- */
+async function loadStats(){
+  const s = await api("/stats"); const names = Object.keys(s.counts.train);
+  if(!names.length){ $("countNote").textContent = "No training images yet."; return; }
+  draw("countChart",{type:"bar", data:{labels:names, datasets:[
+    {label:"Train", data:names.map(n=>s.counts.train[n]), backgroundColor:palette[0]},
+    {label:"Test", data:names.map(n=>s.counts.test[n]||0), backgroundColor:palette[1]}]},
+    options:{scales:{x:{stacked:true}, y:{stacked:true}}}});
+  const tot = names.map(n=>s.counts.train[n]), ratio = Math.max(...tot)/Math.min(...tot);
+  $("countNote").textContent = ratio > 1.5
+    ? `The largest class has ${ratio.toFixed(1)}× the images of the smallest, so watch recall on the small classes.`
+    : `Every digit has about the same number of examples (largest is ${ratio.toFixed(2)}× the smallest), so the model has no reason to favour one digit and accuracy is a fair headline number.`;
+  const f = s.features; if(!f || !f.ink_coverage) return;
+  const stat = obj => Object.fromEntries(Object.entries(obj).map(([k,v]) => { const m = v.reduce((a,b)=>a+b,0)/v.length;
+    return [k, {m, sd: Math.sqrt(v.reduce((a,b)=>a+(b-m)**2,0)/v.length)}]; }));
+  const ar = stat(f.aspect_ratio);
+  draw("shapeChart",{type:"bar", data:{labels:names, datasets:[
+    {label:"Average width ÷ height", data:names.map(n=>ar[n].m), backgroundColor:palette[0]},
+    {label:"Spread (standard deviation)", data:names.map(n=>ar[n].sd), backgroundColor:palette[1]}]},
+    options:{scales:{y:{beginAtZero:true}}}});
+  const srt = Object.entries(ar).sort((a,b)=>a[1].m-b[1].m), [lo, hi] = [srt[0], srt.at(-1)];
+  const avgSd = srt.reduce((a,x)=>a+x[1].sd,0)/srt.length, varied = srt.slice().sort((a,b)=>b[1].sd-a[1].sd)[0][0];
+  $("shapeNote").textContent = `${lo[0]} is the narrowest digit on average (${lo[1].m.toFixed(2)} wide for every 1 tall) and ${hi[0]} the widest (${hi[1].m.toFixed(2)}). ` +
+    (hi[1].m - lo[1].m < 2*avgSd ? "That gap is small next to how much width varies within each digit, so width alone cannot tell digits apart and the model must learn their shapes. "
+                                  : "Width separates the extremes well, but the middle digits overlap, so the model still needs shape. ") +
+    `${varied} varies most in width from writer to writer.`;
+  const grid = $("avgGrid"); grid.innerHTML = "";
+  Object.entries(f.mean_images).forEach(([k, img]) => {
+    const fig = document.createElement("figure"), c = document.createElement("canvas");
+    c.width = img.length; c.height = img.length; const ctx = c.getContext("2d"), d = ctx.createImageData(c.width, c.height);
+    img.flat().forEach((v,i) => { const g = Math.round(v*255); d.data.set([g,g,g,255], i*4); });
+    ctx.putImageData(d,0,0); fig.append(c); fig.append(document.createTextNode(k)); grid.append(fig);
+  });
+  const sharp = Object.entries(f.mean_images).map(([k,img]) => { const v = img.flat(), m = v.reduce((a,b)=>a+b,0)/v.length;
+    return [k, Math.sqrt(v.reduce((a,b)=>a+(b-m)**2,0)/v.length)]; }).sort((a,b)=>b[1]-a[1]);
+  $("avgNote").textContent = `Each square is every training image of that digit averaged together. ${sharp[0][0]} and ${sharp[1][0]} have the sharpest averages, so people write them consistently. ${sharp.at(-1)[0]} and ${sharp.at(-2)[0]} are the blurriest, meaning many writing styles: expect most mistakes there.`;
+}
+
+/* ---------- upload & retrain ---------- */
+async function loadUploads(){
+  const u = await api("/uploads");
+  $("pendingNote").textContent = u.pending
+    ? `${u.pending} new image${u.pending>1?"s":""} waiting (${Object.entries(u.by_class).map(([k,v])=>`${k}: ${v}`).join(", ")}).`
+    : "No new images waiting.";
+  $("triggerNote").textContent = u.auto_retrain
+    ? `Upload labelled images, then retrain. Retraining also starts on its own once ${u.threshold} new images are waiting.`
+    : "Upload labelled images, then retrain.";
+}
+$("upBtn").onclick = async () => {
+  const files = $("upFiles").files; if(!files.length){ $("upStatus").textContent = "Choose at least one file."; return; }
+  const fd = new FormData(); [...files].forEach(f=>fd.append("files", f));
+  if($("upLabel").value.trim()) fd.append("label", $("upLabel").value.trim());
+  $("upBtn").disabled = true; $("upStatus").className = "status"; $("upStatus").textContent = "Uploading…";
+  try{ const r = await api("/upload",{method:"POST", body:fd});
+    $("upStatus").textContent = `Uploaded ${r.saved} image${r.saved===1?"":"s"}${r.rejected?`, skipped ${r.rejected} unreadable`:""}.` +
+      (r.auto_retrain_started ? " Threshold reached, retraining started." : "");
+    $("upFiles").value = ""; loadUploads(); loadStats(); if(r.auto_retrain_started) pollRetrain();
+  }catch(e){ $("upStatus").className = "status err"; $("upStatus").textContent = e.message; }
+  $("upBtn").disabled = false;
+};
+$("rtBtn").onclick = async () => {
+  $("rtStatus").className = "status";
+  try{ await api("/retrain",{method:"POST"}); pollRetrain(); }
+  catch(e){ $("rtStatus").className = "status err"; $("rtStatus").textContent = e.message; }
+};
+let polling = null;
+async function pollRetrain(){
+  const s = await api("/retrain/status").catch(()=>({state:"idle"}));
+  $("rtBtn").disabled = s.state === "running";
+  if(s.state === "running"){ $("rtStatus").textContent = `Retraining: ${s.message || "working"}…`;
+    clearTimeout(polling); polling = setTimeout(pollRetrain, 3000); return; }
+  if(s.state === "done" && s.result){ const r = s.result;
+    $("rtStatus").textContent = `${s.message}. Accuracy ${pct(r.old_accuracy)} before, ${pct(r.new_accuracy)} after, in ${r.duration_s}s.`; }
+  if(s.state === "failed"){ $("rtStatus").className = "status err"; $("rtStatus").textContent = "Retraining failed: " + s.message; }
+  loadMetrics(); loadUploads(); loadStats();
+}
+
+heartbeat(); setInterval(heartbeat, 3000);
+loadMetrics(); loadStats().catch(()=>{}); loadUploads().catch(()=>{}); pollRetrain();
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+tensorflow-cpu==2.18.0
+numpy==2.0.2
+pandas==2.2.3
+scikit-learn==1.5.2
+pillow==10.4.0
+# API
+fastapi==0.110.3
+uvicorn[standard]==0.29.0
+python-multipart==0.0.9

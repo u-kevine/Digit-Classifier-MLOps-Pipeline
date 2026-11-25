@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+data/uploads/*
+!data/uploads/.gitkeep
+models/archive/
+models/*.tmp.h5
+models/retrain_status.json
+locust/results/*.csv
