@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+USERS=${1:-100}
+DURATION=${2:-2m}
+HOST="http://${VM#*@}:8000"
+mkdir -p locust/results
+
+for N in 1 2 4; do
+  echo "=== $N container(s), $USERS users, $DURATION ==="
+  ssh "$VM" "cd DIGIT-CLASSIFIER-MLOP && docker compose up -d --scale api=$N && docker compose restart nginx"
+  until curl -sf "$HOST/health" > /dev/null; do sleep 3; done
+  sleep 20   # let every replica finish loading the model
+  locust -f locust/locustfile.py --host "$HOST" --headless \
+         -u "$USERS" -r 10 -t "$DURATION" --csv "locust/results/c${N}" --only-summary
+done
+
+python scripts/summarize_locust.py
