@@ -1,8 +1,8 @@
 """Model creation, training, evaluation and retraining for the digit CNN.
 CLI:
-    python -m src.model train      # first training run
+    python -m src.model train     
     python -m src.model retrain   
-    python -m src.model evaluate   # evaluate the current model on data/test
+    python -m src.model evaluate   
 """
 import json
 import shutil
@@ -35,7 +35,36 @@ def read_json(path, default=None):
 def write_json(path, data):
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2, default=float))
-    tmp.replace(path)                      # atomic, so readers never see half a file
+    tmp.replace(path)                      
+
+
+def acquire_retrain_lock() -> bool:
+    """Create the lock file atomically. Only one process (in any container sharing the models
+    volume) can hold it, so two replicas can never retrain at the same time."""
+    import os
+    path = config.RETRAIN_LOCK_PATH
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        try:
+            age = time.time() - path.stat().st_mtime
+        except FileNotFoundError:
+            return acquire_retrain_lock()
+        if age < config.RETRAIN_LOCK_MAX_AGE_S:
+            return False
+        path.unlink(missing_ok=True)          
+        return acquire_retrain_lock()
+    with os.fdopen(fd, "w") as fh:
+        fh.write(_now())
+    return True
+
+
+def release_retrain_lock():
+    config.RETRAIN_LOCK_PATH.unlink(missing_ok=True)
+
+
+def retrain_running() -> bool:
+    return config.RETRAIN_LOCK_PATH.exists()
 
 
 def read_status() -> dict:
@@ -200,12 +229,10 @@ def should_retrain() -> bool:
 
 def retrain(trigger: str = "manual", epochs: int = 10) -> dict:
     """Merge uploads into the training set, fine-tune the current model, and promote the
-    new model only if it scores at least as well as the current one on the same test set."""
-    status = read_status()
-    if status.get("state") == "running":
-        updated = datetime.fromisoformat(status.get("updated_at", _now()))
-        if (datetime.now(timezone.utc) - updated).total_seconds() < 3600:
-            return {"state": "running", "message": "A retraining job is already running."}
+    new model unless its test accuracy is more than PROMOTION_TOLERANCE below the current
+    model's on the same test set."""
+    if not acquire_retrain_lock():
+        return {"state": "running", "message": "A retraining job is already running."}
     start = time.time()
     write_status(state="running", trigger=trigger, started_at=_now(), message="Merging uploads")
     try:
@@ -219,8 +246,8 @@ def retrain(trigger: str = "manual", epochs: int = 10) -> dict:
             write_status(message="Scoring the current model")
             old_model = load_current_model()
             old_metrics = evaluate_model(old_model, test_ds, class_names)
-            copy_weights(old_model, model)                 # warm start from current weights
-            compile_model(model, learning_rate=3e-4)       # smaller steps: refine, don't restart
+            copy_weights(old_model, model)                 
+            compile_model(model, learning_rate=3e-4)       
         write_status(message="Training on old and new data")
         h = model.fit(train_ds, validation_data=val_ds, epochs=epochs, callbacks=get_callbacks(3), verbose=2)
 
@@ -238,11 +265,14 @@ def retrain(trigger: str = "manual", epochs: int = 10) -> dict:
             result["version"] = save_model(model, class_names, new_metrics, history_dict(h),
                                            trigger, extra={"new_images": sum(moved.values())})
         write_status(state="done", finished_at=_now(), result=result,
-                     message="New model deployed" if promoted else "Kept current model (new one scored lower)")
+                     message="New model deployed" if promoted
+                     else "Kept current model (new one scored more than the allowed margin lower)")
         return result
     except Exception as exc:  # noqa: BLE001
         write_status(state="failed", finished_at=_now(), message=str(exc))
         raise
+    finally:
+        release_retrain_lock()
 
 
 if __name__ == "__main__":

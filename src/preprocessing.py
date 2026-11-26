@@ -16,7 +16,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from src import config
 
 RAW_DIR = config.DATA_DIR / "raw"
-NATIVE_SIZE = (8, 8)      # resolution the original digits were recorded at
+NATIVE_SIZE = (8, 8)      
 
 
 # 1. Data acquisition
@@ -76,7 +76,7 @@ def canonicalize(image) -> Image.Image:
         rows, cols = np.where(mask.any(axis=1))[0], np.where(mask.any(axis=0))[0]
         arr = arr[rows[0]:rows[-1] + 1, cols[0]:cols[-1] + 1]
     h, w = arr.shape
-    side = max(h, w)                        # digit fills the frame top to bottom, as in the dataset
+    side = max(h, w)                        #
     canvas = np.zeros((side, side), dtype=np.float32)
     top, left = (side - h) // 2, (side - w) // 2
     canvas[top:top + h, left:left + w] = arr
@@ -229,15 +229,20 @@ def pending_upload_count() -> int:
 
 
 def merge_uploads_into_train(test_fraction: float = 0.2) -> dict:
-    """Move pending uploads into train, with a share into test so evaluation covers them."""
+    """Move pending uploads into train, with a share into test so evaluation covers them.
+    A copy of each file is also kept in data/raw so the processed folders can be rebuilt."""
     moved = {}
     for class_dir in [p for p in config.UPLOAD_DIR.iterdir() if p.is_dir()]:
         files = [f for f in class_dir.iterdir() if f.suffix.lower() in config.IMAGE_EXTS]
         random.shuffle(files)
         n_test = max(1, int(len(files) * test_fraction)) if len(files) >= 5 else 0
         for i, f in enumerate(files):
-            target = (config.TEST_DIR if i < n_test else config.TRAIN_DIR) / class_dir.name
+            split = "test" if i < n_test else "train"
+            target = (config.TEST_DIR if split == "test" else config.TRAIN_DIR) / class_dir.name
+            raw_target = RAW_DIR / split / class_dir.name
             target.mkdir(parents=True, exist_ok=True)
+            raw_target.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f, raw_target / f.name)
             shutil.move(str(f), target / f.name)
         moved[class_dir.name] = len(files)
         shutil.rmtree(class_dir, ignore_errors=True)

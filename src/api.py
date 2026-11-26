@@ -6,14 +6,15 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src import config
-from src.model import (evaluate_model, read_json, read_status, retrain, should_retrain)
+from src.model import (evaluate_model, read_json, read_status, retrain, retrain_running,
+                       should_retrain)
 from src.prediction import get_predictor
 from src.preprocessing import (class_counts, dataset_features, mean_images,
                                pending_upload_count, save_uploads)
@@ -27,6 +28,12 @@ _stats_cache = {"key": None, "data": None}
 app = FastAPI(title="Digit Classifier", version="1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
+
+
+def require_api_key(x_api_key: Optional[str] = Header(None)):
+    """Protect endpoints that change data or the model. Disabled when API_KEY is not set."""
+    if config.API_KEY and x_api_key != config.API_KEY:
+        raise HTTPException(401, "This action needs the API key.")
 
 
 @app.middleware("http")
@@ -59,7 +66,7 @@ def health():
         "model_version": p.version,
         "requests_served": _counter["requests"],
         "predictions_served": _counter["predictions"],
-        "retraining": read_status().get("state"),
+        "retraining": "running" if retrain_running() else read_status().get("state"),
     }
 
 
@@ -111,7 +118,7 @@ def metrics():
     return meta
 
 
-@app.post("/upload")
+@app.post("/upload", dependencies=[Depends(require_api_key)])
 async def upload(background: BackgroundTasks, files: List[UploadFile] = File(...),
                  label: Optional[str] = Form(None)):
     """Bulk upload: many images with one class label, or a .zip with class sub-folders."""
@@ -121,7 +128,7 @@ async def upload(background: BackgroundTasks, files: List[UploadFile] = File(...
     except ValueError as e:
         raise HTTPException(400, str(e))
     result["auto_retrain_started"] = False
-    if config.AUTO_RETRAIN and should_retrain() and read_status().get("state") != "running":
+    if config.AUTO_RETRAIN and should_retrain() and not retrain_running():
         background.add_task(_run_retrain, "auto: upload threshold reached")
         result["auto_retrain_started"] = True
     result["threshold"] = config.RETRAIN_THRESHOLD
@@ -138,13 +145,13 @@ def uploads():
 def _run_retrain(trigger: str):
     try:
         retrain(trigger=trigger)
-    except Exception as e:  # status file already records the failure
+    except Exception as e: 
         print("Retraining failed:", e)
 
 
-@app.post("/retrain")
+@app.post("/retrain", dependencies=[Depends(require_api_key)])
 def trigger_retrain(background: BackgroundTasks):
-    if read_status().get("state") == "running":
+    if retrain_running():
         raise HTTPException(409, "Retraining is already running.")
     if pending_upload_count() == 0 and os.getenv("ALLOW_EMPTY_RETRAIN", "false") != "true":
         raise HTTPException(400, "Upload new images before retraining.")
@@ -161,7 +168,7 @@ def retrain_status():
 _eval_lock = threading.Lock()
 
 
-@app.post("/evaluate")
+@app.post("/evaluate", dependencies=[Depends(require_api_key)])
 async def evaluate():
     """Re-score the live model on the held-out test set (includes new data merged in)."""
     p = get_predictor()

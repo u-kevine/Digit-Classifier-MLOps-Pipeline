@@ -87,7 +87,7 @@ th:first-child,td:first-child{text-align:left}
 
 <div class="pulse">
   <div>
-    <p class="muted">Up for</p>
+    <p class="muted">This container has been up for</p>
     <div class="uptime" id="uptime">–</div>
     <div class="facts">
       <span>Model <b id="ver">–</b></span>
@@ -162,7 +162,7 @@ th:first-child,td:first-child{text-align:left}
     </li>
     <li class="panel">
       <h3>Check the result</h3>
-      <p class="note" style="margin-top:0">A new model only goes live if it scores at least as well as the current one.</p>
+      <p class="note" style="margin-top:0">A new model goes live unless its test accuracy is more than 1 percentage point below the current one.</p>
       <div class="scroll"><table id="versions"><thead><tr><th>Version</th><th>Trigger</th><th>Accuracy</th><th>F1</th></tr></thead><tbody></tbody></table></div>
     </li>
   </ol>
@@ -178,7 +178,15 @@ Chart.defaults.font.family = css("--body"); Chart.defaults.color = css("--muted"
 Chart.defaults.borderColor = css("--line"); Chart.defaults.maintainAspectRatio = false;
 const charts = {};
 function draw(id, cfg){ charts[id]?.destroy(); charts[id] = new Chart($(id), cfg); }
-async function api(path, opts){ const r = await fetch(path, opts); const j = await r.json().catch(()=>({}));
+let apiKey = null;   // asked for once when the server requires it, kept only for this page visit
+async function api(path, opts = {}, retried = false){
+  const headers = {...(opts.headers || {})};
+  if(apiKey) headers["X-API-Key"] = apiKey;
+  const r = await fetch(path, {...opts, headers}); const j = await r.json().catch(()=>({}));
+  if(r.status === 401 && !retried){
+    const k = prompt("This action needs the API key:");
+    if(k){ apiKey = k.trim(); return api(path, opts, true); }
+  }
   if(!r.ok) throw new Error(j.detail || r.statusText); return j; }
 
 /* ---------- uptime heartbeat ---------- */
