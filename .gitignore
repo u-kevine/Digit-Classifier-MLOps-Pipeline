@@ -9,4 +9,4 @@ data/uploads/*
 models/archive/
 models/*.tmp.h5
 models/retrain_status.json
-locust/results/*.csv
+locust/results/*.csv.env
