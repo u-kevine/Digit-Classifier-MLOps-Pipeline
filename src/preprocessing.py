@@ -1,11 +1,4 @@
-"""Data acquisition and preprocessing for handwritten digits.
-
-Folder layout (one folder per digit):
-    data/raw/train/<digit>/*.png    
-    data/raw/test/<digit>/*.png
-    data/train/<digit>/*.png        
-    data/test/<digit>/*.png
-    data/uploads/<digit>/*.png      
+"""Data acquisition and preprocessing for handwritten digits. 
 Every image (training data, uploads, and the image sent to /predict) goes through the
 same `canonicalize()` step, so the model always sees digits in one consistent format.
 """
@@ -26,9 +19,8 @@ RAW_DIR = config.DATA_DIR / "raw"
 NATIVE_SIZE = (8, 8)      # resolution the original digits were recorded at
 
 
-# --------------------------------------------------------------------------- #
 # 1. Data acquisition
-# --------------------------------------------------------------------------- #
+
 def class_counts(folder: Path) -> dict:
     folder = Path(folder)
     if not folder.exists():
@@ -64,18 +56,10 @@ def acquire_data(test_split: float = 0.2) -> dict:
     return counts
 
 
-# --------------------------------------------------------------------------- #
 # 2. Data processing
-# --------------------------------------------------------------------------- #
-def canonicalize(image) -> Image.Image:
-    """Any digit image -> 32x32 grayscale, white digit on black, cropped and centred.
 
-    1. Grayscale
-    2. Invert if the background is light (a photo of dark ink on paper)
-    3. Stretch contrast so the brightest stroke is 255
-    4. Crop to the digit's bounding box and pad it to a square
-    5. Shrink to 8x8 (the dataset's native resolution), then enlarge to 32x32
-    """
+def canonicalize(image) -> Image.Image:
+    """Any digit image -> 32x32 grayscale, white digit on black, cropped and centred."""
     if isinstance(image, (bytes, bytearray)):
         image = Image.open(io.BytesIO(image))
     elif isinstance(image, (str, Path)):
@@ -146,9 +130,9 @@ def augmentation_layer():
     import tensorflow as tf
 
     return tf.keras.Sequential([
-        tf.keras.layers.RandomRotation(0.05),
-        tf.keras.layers.RandomTranslation(0.1, 0.1),
-        tf.keras.layers.RandomZoom(0.1),
+        tf.keras.layers.RandomRotation(0.08),
+        tf.keras.layers.RandomTranslation(0.12, 0.12),
+        tf.keras.layers.RandomZoom(0.12),
     ], name="augmentation")
 
 
@@ -158,9 +142,8 @@ def preprocess_image(image) -> np.ndarray:
     return arr[None, :, :, None]
 
 
-# --------------------------------------------------------------------------- #
 # Features for visualisation
-# --------------------------------------------------------------------------- #
+
 def image_features(path: Path) -> dict:
     arr = np.asarray(Image.open(path).convert("L"), dtype=np.float32) / 255
     ink = arr > 0.25
@@ -195,9 +178,8 @@ def mean_images(folder: Path = config.TRAIN_DIR, size: int = 16) -> dict:
     return out
 
 
-# --------------------------------------------------------------------------- #
 # Upload handling for retraining
-# --------------------------------------------------------------------------- #
+
 def _valid_label(label) -> str:
     label = str(label).strip()
     if label not in {str(d) for d in range(10)}:
@@ -260,3 +242,19 @@ def merge_uploads_into_train(test_fraction: float = 0.2) -> dict:
         moved[class_dir.name] = len(files)
         shutil.rmtree(class_dir, ignore_errors=True)
     return moved
+
+
+def add_mnist(per_class: int = 600, test_per_class: int = 100) -> dict:
+    """Add a sample of MNIST digits to data/raw so the model sees many more writing styles."""
+    import tensorflow as tf
+
+    (x_tr, y_tr), (x_te, y_te) = tf.keras.datasets.mnist.load_data()
+    rng = np.random.default_rng(config.SEED)
+    for split, X, Y, n in (("train", x_tr, y_tr, per_class), ("test", x_te, y_te, test_per_class)):
+        for d in range(10):
+            idx = rng.choice(np.where(Y == d)[0], n, replace=False)
+            out = RAW_DIR / split / str(d)
+            out.mkdir(parents=True, exist_ok=True)
+            for i in idx:
+                Image.fromarray(X[i]).save(out / f"mnist_{i}.png")
+    return {"train": class_counts(RAW_DIR / "train"), "test": class_counts(RAW_DIR / "test")}
